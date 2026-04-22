@@ -1,0 +1,9 @@
+prd.txt
+.claude/
+.env
+server/tmp/
+server/bin/
+server/api.exe
+web/node_modules/
+web/dist/
+.ace-tool/

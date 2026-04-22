@@ -1,0 +1,72 @@
+CREATE TABLE IF NOT EXISTS users (
+  id BIGSERIAL PRIMARY KEY,
+  email VARCHAR(255) NOT NULL UNIQUE,
+  role VARCHAR(32) NOT NULL DEFAULT 'viewer',
+  oauth_provider VARCHAR(32) NOT NULL,
+  oauth_subject VARCHAR(255) NOT NULL,
+  oauth_info JSONB NOT NULL DEFAULT '{}'::jsonb,
+  token_version INTEGER NOT NULL DEFAULT 1,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS accounts (
+  id BIGSERIAL PRIMARY KEY,
+  user_id BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  name VARCHAR(255) NOT NULL,
+  provider VARCHAR(64) NOT NULL,
+  encrypted_config JSONB NOT NULL DEFAULT '{}'::jsonb,
+  expires_at TIMESTAMPTZ,
+  last_checked_at TIMESTAMPTZ,
+  status VARCHAR(32) NOT NULL DEFAULT 'active',
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS domains (
+  id BIGSERIAL PRIMARY KEY,
+  account_id BIGINT NOT NULL REFERENCES accounts(id) ON DELETE CASCADE,
+  name VARCHAR(255) NOT NULL,
+  provider_zone_id VARCHAR(255) NOT NULL,
+  is_starred BOOLEAN NOT NULL DEFAULT FALSE,
+  tags JSONB NOT NULL DEFAULT '{}'::jsonb,
+  last_synced_at TIMESTAMPTZ,
+  last_propagation_status JSONB NOT NULL DEFAULT '{}'::jsonb,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS backups (
+  id BIGSERIAL PRIMARY KEY,
+  domain_id BIGINT NOT NULL REFERENCES domains(id) ON DELETE CASCADE,
+  triggered_by_user_id BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  reason VARCHAR(255) NOT NULL,
+  content JSONB NOT NULL DEFAULT '{}'::jsonb,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS domain_profiles (
+  id BIGSERIAL PRIMARY KEY,
+  domain_id BIGINT NOT NULL UNIQUE REFERENCES domains(id) ON DELETE CASCADE,
+  description TEXT NOT NULL DEFAULT '',
+  attachment_urls JSONB NOT NULL DEFAULT '{}'::jsonb,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS propagation_checks (
+  id BIGSERIAL PRIMARY KEY,
+  domain_id BIGINT NOT NULL REFERENCES domains(id) ON DELETE CASCADE,
+  triggered_by_user_id BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  fqdn VARCHAR(255) NOT NULL,
+  record JSONB NOT NULL DEFAULT '{}'::jsonb,
+  overall_status VARCHAR(32) NOT NULL,
+  summary VARCHAR(255) NOT NULL,
+  matched_count INTEGER NOT NULL DEFAULT 0,
+  failed_count INTEGER NOT NULL DEFAULT 0,
+  pending_count INTEGER NOT NULL DEFAULT 0,
+  total_resolvers INTEGER NOT NULL DEFAULT 0,
+  results JSONB NOT NULL DEFAULT '{}'::jsonb,
+  checked_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
