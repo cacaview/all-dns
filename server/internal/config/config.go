@@ -20,10 +20,10 @@ type Config struct {
 	ReminderWebhookURL string
 	DevLoginEnabled    bool
 
-	MasterKey           []byte
-	JWTSecret           string
-	JWTAccessTTL        time.Duration
-	JWTRefreshTTL       time.Duration
+	MasterKey            []byte
+	JWTSecret            string
+	JWTAccessTTL         time.Duration
+	JWTRefreshTTL        time.Duration
 	PropagationResolvers []string
 
 	DatabaseHost      string
@@ -42,6 +42,17 @@ type Config struct {
 
 	StorageType string // "local" (default) or "s3"
 	S3Config    S3StorageConfig
+
+	RateLimitRequests int           // max requests per window (default 100)
+	RateLimitWindow   time.Duration // window duration (default 1 minute)
+	RateLimitBurst    int           // max burst for write operations (default 10)
+
+	SMTPHost     string // SMTP server host
+	SMTPPort     int    // SMTP server port (default 587)
+	SMTPUsername string
+	SMTPPassword string
+	SMTPFrom     string // from address, e.g. "DNS Hub <noreply@example.com>"
+	SMTPEnabled  bool   // whether to send email notifications
 }
 
 // S3StorageConfig holds S3-compatible object storage settings.
@@ -56,6 +67,8 @@ type S3StorageConfig struct {
 }
 
 func Load() (Config, error) {
+	smtpPort, _ := strconv.Atoi(getEnv("SMTP_PORT", "587"))
+
 	cfg := Config{
 		AppName:            getEnv("APP_NAME", "DNS Hub"),
 		AppEnv:             getEnv("APP_ENV", "development"),
@@ -88,6 +101,15 @@ func Load() (Config, error) {
 			AccessKeyID:     strings.TrimSpace(os.Getenv("S3_ACCESS_KEY_ID")),
 			SecretAccessKey: strings.TrimSpace(os.Getenv("S3_SECRET_ACCESS_KEY")),
 		},
+		RateLimitRequests: 100,
+		RateLimitWindow:   time.Minute,
+		RateLimitBurst:    10,
+		SMTPHost:          strings.TrimSpace(os.Getenv("SMTP_HOST")),
+		SMTPPort:          smtpPort,
+		SMTPUsername:      strings.TrimSpace(os.Getenv("SMTP_USERNAME")),
+		SMTPPassword:      strings.TrimSpace(os.Getenv("SMTP_PASSWORD")),
+		SMTPFrom:          strings.TrimSpace(os.Getenv("SMTP_FROM")),
+		SMTPEnabled:       getEnv("SMTP_ENABLED", "false") == "true",
 	}
 
 	masterKey, err := parseMasterKey(strings.TrimSpace(os.Getenv("APP_MASTER_KEY")))

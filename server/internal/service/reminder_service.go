@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"fmt"
 	"time"
 
 	"dns-hub/server/internal/model"
@@ -22,12 +23,19 @@ type Reminder struct {
 }
 
 type ReminderService struct {
-	db       *gorm.DB
-	notifier *notifier.WebhookNotifier
+	db            *gorm.DB
+	webhookSvc    *WebhookService
+	emailNotifier *notifier.EmailNotifier
+	dnsSvc        *DNSService
 }
 
-func NewReminderService(db *gorm.DB, webhook *notifier.WebhookNotifier) *ReminderService {
-	return &ReminderService{db: db, notifier: webhook}
+func NewReminderService(db *gorm.DB, webhookSvc *WebhookService, emailNotifier *notifier.EmailNotifier) *ReminderService {
+	return &ReminderService{db: db, webhookSvc: webhookSvc, emailNotifier: emailNotifier}
+}
+
+// SetDNSService breaks the constructor-cycle with DNSService.
+func (s *ReminderService) SetDNSService(dnsSvc *DNSService) {
+	s.dnsSvc = dnsSvc
 }
 
 func (s *ReminderService) Scan(ctx context.Context) ([]Reminder, error) {
@@ -37,6 +45,7 @@ func (s *ReminderService) Scan(ctx context.Context) ([]Reminder, error) {
 	}
 	reminders := make([]Reminder, 0)
 	now := time.Now().UTC()
+	byOrg := make(map[uint][]Reminder)
 	for _, account := range accounts {
 		if account.ExpiresAt == nil {
 			continue
@@ -56,15 +65,85 @@ func (s *ReminderService) Scan(ctx context.Context) ([]Reminder, error) {
 			DaysLeft:  daysLeft,
 		}
 		reminders = append(reminders, reminder)
+		byOrg[account.OrgID] = append(byOrg[account.OrgID], reminder)
 	}
-	if len(reminders) > 0 {
-		_ = s.notifier.Notify(ctx, map[string]any{
-			"type":      "credential_expiry",
+for orgID, orgReminders := range byOrg {
+		payload := map[string]any{
+			"type":        "credential_expiry",
 			"generatedAt": now.Format(time.RFC3339),
-			"reminders": reminders,
-		})
+			"reminders":   orgReminders,
+		}
+		_ = s.webhookSvc.NotifyAll(ctx, orgID, "credential_expiry", payload)
+		if s.emailNotifier != nil && s.emailNotifier.Enabled() {
+			_ = s.sendExpiryEmails(ctx, orgID, orgReminders)
+		}
+		// Auto-reactivate accounts that were in error state — credentials may have been renewed manually
+		if s.dnsSvc != nil {
+			for _, reminder := range orgReminders {
+				if reminder.Severity == "expired" || reminder.Severity == "critical" {
+					_ = s.dnsSvc.ReactivateAccount(ctx, reminder.UserID, reminder.AccountID)
+				}
+			}
+		}
 	}
 	return reminders, nil
+}
+
+func (s *ReminderService) sendExpiryEmails(ctx context.Context, orgID uint, reminders []Reminder) error {
+	org, err := s.getOrgUsers(ctx, orgID)
+	if err != nil || len(org.users) == 0 {
+		return err
+	}
+
+	subject := fmt.Sprintf("DNS Hub: %d credential(s) expiring soon", len(reminders))
+	body := formatExpiryEmailBody(reminders)
+
+	payload := map[string]any{
+		"to":      org.users,
+		"subject": subject,
+		"body":    body,
+	}
+	return s.emailNotifier.Notify(ctx, payload)
+}
+
+func formatExpiryEmailBody(reminders []Reminder) string {
+	var lines []string
+	lines = append(lines, "DNS Hub Credential Expiry Report")
+	lines = append(lines, "==================================")
+	lines = append(lines, "")
+	for _, r := range reminders {
+		lines = append(lines, fmt.Sprintf("- [%s] %s (%s): %s (%d days left)",
+			r.Severity, r.Name, r.Provider, r.ExpiresAt.Format("2006-01-02"), r.DaysLeft))
+	}
+	lines = append(lines, "")
+	lines = append(lines, "Visit DNS Hub to review and update credentials before they expire.")
+	return fmt.Sprintf("%s\n", joinLines(lines...))
+}
+
+func joinLines(parts ...string) string {
+	result := ""
+	for _, p := range parts {
+		result += p + "\n"
+	}
+	return result
+}
+
+type orgUserSet struct {
+	users []string
+}
+
+func (s *ReminderService) getOrgUsers(ctx context.Context, orgID uint) (*orgUserSet, error) {
+	var users []model.User
+	if err := s.db.WithContext(ctx).Where("primary_org_id = ?", orgID).Find(&users).Error; err != nil {
+		return nil, err
+	}
+	set := &orgUserSet{}
+	for _, u := range users {
+		if u.Email != "" {
+			set.users = append(set.users, u.Email)
+		}
+	}
+	return set, nil
 }
 
 func (s *ReminderService) Start(ctx context.Context) {

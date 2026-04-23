@@ -17,10 +17,15 @@ func Migrate(database *gorm.DB) error {
 		&model.DomainProfile{},
 		&model.PropagationCheck{},
 		&model.ReminderAck{},
+		&model.Webhook{},
+		&model.AuditLog{},
 	); err != nil {
 		return err
 	}
-	return patchLegacySchema(database)
+	if err := patchLegacySchema(database); err != nil {
+		return err
+	}
+	return RunMigrations(database)
 }
 
 func patchLegacySchema(database *gorm.DB) error {

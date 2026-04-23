@@ -39,10 +39,13 @@ func main() {
 	cryptoService := service.NewCryptoService(cfg.MasterKey)
 	tokenService := service.NewTokenService(cfg.JWTSecret, cfg.JWTAccessTTL, cfg.JWTRefreshTTL)
 	webhookNotifier := notifier.NewWebhookNotifier(cfg.ReminderWebhookURL)
+	emailNotifier := notifier.NewEmailNotifier(cfg.SMTPHost, cfg.SMTPPort, cfg.SMTPUsername, cfg.SMTPPassword, cfg.SMTPFrom)
+	webhookService := service.NewWebhookService(database, webhookNotifier)
 	snapshotService := service.NewSnapshotService(database)
 	propagationService := service.NewPropagationService(database, cfg.PropagationResolvers)
-	reminderService := service.NewReminderService(database, webhookNotifier)
+	reminderService := service.NewReminderService(database, webhookService, emailNotifier)
 	dnsService := service.NewDNSService(database, cryptoService, snapshotService, propagationService, reminderService)
+	reminderService.SetDNSService(dnsService)
 
 	oauthProviders := []appoauth.Provider{}
 	if cfg.OAuthEnabled("github") {
@@ -75,7 +78,7 @@ func main() {
 		log.Printf("using local storage at: %s", cfg.UploadDir)
 	}
 
-	router := apphttp.NewRouter(cfg, authService, tokenService, dnsService, fileStorage)
+	router := apphttp.NewRouter(cfg, database, authService, tokenService, dnsService, webhookService, fileStorage)
 	server := &http.Server{
 		Addr:              ":" + cfg.Port,
 		Handler:           router,

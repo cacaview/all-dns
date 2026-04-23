@@ -118,6 +118,57 @@ func (h *DomainHandler) ExportBackup(c *gin.Context) {
 	c.Data(http.StatusOK, "application/json", payload)
 }
 
+func (h *DomainHandler) ExportRecords(c *gin.Context) {
+	user, ok := middleware.CurrentUser(c)
+	if !ok {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "missing authenticated user"})
+		return
+	}
+	domainID, err := parseUintParam(c, "id")
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	format := strings.TrimSpace(c.DefaultQuery("format", "json"))
+	payload, filename, err := h.dns.ExportRecords(c.Request.Context(), user.ID, domainID, format)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	contentType := "application/json"
+	if format == "csv" {
+		contentType = "text/csv"
+	}
+	c.Header("Content-Type", contentType)
+	c.Header("Content-Disposition", fmt.Sprintf("attachment; filename=%q", filename))
+	c.Data(http.StatusOK, contentType, payload)
+}
+
+func (h *DomainHandler) ImportRecords(c *gin.Context) {
+	user, ok := middleware.CurrentUser(c)
+	if !ok {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "missing authenticated user"})
+		return
+	}
+	domainID, err := parseUintParam(c, "id")
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	file, header, err := c.Request.FormFile("file")
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "file is required"})
+		return
+	}
+	defer file.Close()
+	count, err := h.dns.ImportRecords(c.Request.Context(), user.ID, domainID, file, header.Filename)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"ok": true, "imported": count})
+}
+
 func (h *DomainHandler) ListAllBackups(c *gin.Context) {
 	user, ok := middleware.CurrentUser(c)
 	if !ok {

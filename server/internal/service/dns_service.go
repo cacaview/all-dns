@@ -303,6 +303,21 @@ func (s *DNSService) markAccountValidationFailure(account *model.Account, valida
 	_ = s.db.Save(account).Error
 }
 
+// ReactivateAccount re-validates the account credentials and syncs domains.
+// If credentials were renewed manually, this marks the account as valid again.
+func (s *DNSService) ReactivateAccount(ctx context.Context, userID, accountID uint) error {
+	account, err := s.getAccountForUser(accountID, userID)
+	if err != nil {
+		return err
+	}
+	// Only reactivate accounts that are currently in an error state
+	if account.CredentialStatus != "invalid" && account.Status != "error" {
+		return nil
+	}
+	_, err = s.ValidateAndSyncAccount(ctx, userID, account.ID)
+	return err
+}
+
 func valueOrNow(value time.Time) time.Time {
 	if value.IsZero() {
 		return time.Now().UTC()

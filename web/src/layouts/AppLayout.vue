@@ -8,6 +8,7 @@
         <el-menu-item index="/propagation">传播监控</el-menu-item>
         <el-menu-item index="/notifications">通知中心</el-menu-item>
         <el-menu-item index="/backups">备份中心</el-menu-item>
+        <el-menu-item v-if="auth.user?.role === 'admin'" index="/webhooks">Webhook 管理</el-menu-item>
         <el-menu-item v-if="auth.user?.role === 'admin'" index="/users">用户管理</el-menu-item>
       </el-menu>
     </el-aside>
@@ -45,6 +46,7 @@ const activeMenu = computed(() => {
   if (route.path.startsWith('/notifications')) return '/notifications'
   if (route.path.startsWith('/backups')) return '/backups'
   if (route.path.startsWith('/propagation')) return '/propagation'
+  if (route.path.startsWith('/webhooks')) return '/webhooks'
   if (route.path.startsWith('/users')) return '/users'
   return '/dashboard'
 })
@@ -55,6 +57,7 @@ const title = computed(() => {
   if (route.path.startsWith('/notifications')) return '通知中心'
   if (route.path.startsWith('/backups')) return '备份中心'
   if (route.path.startsWith('/propagation')) return '传播监控'
+  if (route.path.startsWith('/webhooks')) return 'Webhook 管理'
   if (route.path.startsWith('/users')) return '用户管理'
   return '运营总览'
 })

@@ -1,6 +1,6 @@
 import { defineStore } from 'pinia'
 import { listAccounts, listReminders, setReminderHandled as apiSetReminderHandled } from '../api/accounts'
-import { fetchDashboardSummary, listAllBackups, listDomains, listPropagationHistory } from '../api/domains'
+import { fetchDashboardSummary, listAllBackups, listDomains, listPropagationHistory, listRecords } from '../api/domains'
 import type { Account, BackupListItem, DashboardSummary, DNSRecord, Domain, PropagationHistoryItem, PropagationStatus, Reminder } from '../types/domain'
 
 const HANDLED_REMINDER_KEY = 'dns-hub-handled-reminders'
@@ -185,7 +185,6 @@ export const useDomainStore = defineStore('domains', {
       this.propagationHistory = await listPropagationHistory(domainId)
     },
     async fetchDomainRecords(domainId: number): Promise<DNSRecord[]> {
-      const { listRecords } = await import('../api/domains')
       return listRecords(domainId)
     },
     setSelectedDomain(domain: Domain | null) {

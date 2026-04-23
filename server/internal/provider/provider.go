@@ -109,6 +109,9 @@ func RegisterDescriptor(descriptor Descriptor) error {
 	descriptor.Key = trimmed
 	registryMu.Lock()
 	defer registryMu.Unlock()
+	if _, exists := descriptors[trimmed]; exists {
+		return fmt.Errorf("descriptor %s already registered", trimmed)
+	}
 	descriptors[trimmed] = descriptor
 	return nil
 }

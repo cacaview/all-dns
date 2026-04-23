@@ -1,1 +1,3 @@
 .ace-tool/
+web/auto-imports.d.ts
+web/components.d.ts

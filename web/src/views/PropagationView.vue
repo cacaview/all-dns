@@ -13,6 +13,9 @@
             <el-button v-if="!overviewMode" type="warning" :loading="watching" @click="toggleWatch">
               {{ watching ? '停止监控' : '持续监控' }}
             </el-button>
+            <el-button v-if="!overviewMode" type="success" :loading="checking" @click="checkNow">
+              立即检查
+            </el-button>
           </el-space>
         </div>
       </template>
@@ -227,7 +230,7 @@ import { computed, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import AppLayout from '../layouts/AppLayout.vue'
-import { listDomains as listDomainsRequest, triggerPropagationWatch } from '../api/domains'
+import { listDomains as listDomainsRequest, triggerPropagation, triggerPropagationWatch } from '../api/domains'
 import { useDomainStore } from '../stores/domains'
 import type { Domain, DNSRecord, PropagationHistoryItem, PropagationResult, PropagationStatus } from '../types/domain'
 
@@ -239,6 +242,7 @@ const showHistoryDrawer = ref(false)
 const selectedHistory = ref<PropagationHistoryItem | null>(null)
 const overviewDomains = ref<Domain[]>([])
 const watching = ref(false)
+const checking = ref(false)
 
 const overviewMode = computed(() => !route.params.id)
 const visibleDomains = computed(() => (overviewMode.value ? overviewDomains.value : store.domains))
@@ -359,6 +363,27 @@ async function toggleWatch() {
     ElMessage.error(e.response?.data?.error || '监控失败')
   } finally {
     watching.value = false
+  }
+}
+
+async function checkNow() {
+  if (!domain.value) return
+  checking.value = true
+  try {
+    const records = await store.fetchDomainRecords(domain.value.id)
+    const target = records.find((r) => ['A', 'AAAA', 'CNAME', 'MX', 'TXT'].includes(r.type)) || records[0]
+    if (!target) {
+      ElMessage.warning('域名下没有可检查的记录')
+      return
+    }
+    const result = await triggerPropagation(domain.value.id, target)
+    store.domainLastPropagationStatus(domain.value.id, result)
+    await store.loadPropagationHistory(domain.value.id)
+    ElMessage.success('传播检查已完成')
+  } catch (e: any) {
+    ElMessage.error(e.response?.data?.error || '检查失败')
+  } finally {
+    checking.value = false
   }
 }
 
